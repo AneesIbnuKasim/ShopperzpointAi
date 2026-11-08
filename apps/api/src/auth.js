@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { config } from './config.js';
 import { User } from './models/User.js';
+import { timingSafeEqual } from 'node:crypto';
 
 export async function ensureAdminUser() {
   const email = config.ADMIN_EMAIL.toLowerCase();
@@ -10,6 +11,17 @@ export async function ensureAdminUser() {
 
   const passwordHash = await bcrypt.hash(config.ADMIN_PASSWORD, 12);
   return User.create({ email, passwordHash });
+}
+
+export function requireWorker(req, res, next) {
+  const received = req.headers['x-worker-token'];
+  if (typeof received !== 'string') return res.status(401).json({ error: 'Worker authentication required' });
+  const expected = Buffer.from(config.WORKER_TOKEN);
+  const actual = Buffer.from(received);
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+    return res.status(401).json({ error: 'Invalid worker credentials' });
+  }
+  return next();
 }
 
 export function createToken(user) {

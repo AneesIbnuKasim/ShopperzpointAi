@@ -5,11 +5,13 @@
   "description": "CraftTrend AI e-commerce research and listing intelligence platform",
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace apps/api\" \"npm run dev --workspace apps/web\"",
+    "worker": "npm run dev --workspace apps/worker",
+    "benchmark": "npm run benchmark --workspace apps/worker",
     "build": "npm run build --workspace apps/web",
     "test": "npm run test --workspace apps/api",
     "start": "npm run start --workspace apps/api"
   },
-  "workspaces": ["apps/api", "apps/web"],
+  "workspaces": ["apps/api", "apps/web", "apps/worker"],
   "devDependencies": {
     "concurrently": "^9.2.1"
   }

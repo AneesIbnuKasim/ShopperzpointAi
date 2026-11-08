@@ -8,6 +8,7 @@ const schema = z.object({
   MONGODB_URI: z.string().min(1),
   JWT_SECRET: z.string().min(32),
   ADMIN_EMAIL: z.string().email(),
-  ADMIN_PASSWORD: z.string().min(12)
+  ADMIN_PASSWORD: z.string().min(12),
+  WORKER_TOKEN: z.string().min(32)
 });
 export const config = schema.parse(process.env);
