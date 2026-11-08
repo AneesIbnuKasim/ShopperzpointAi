@@ -24,6 +24,26 @@ const schemas = {
   TREND_ANALYSIS: {
     shape: '{"trend_direction":"Rising|Stable|Falling|Unknown","trend_summary":"string","signals":["string"],"confidence":"High|Medium|Low","limitations":["string"]}',
     validate: (result) => ['Rising', 'Stable', 'Falling', 'Unknown'].includes(result.trend_direction) && typeof result.trend_summary === 'string' && Array.isArray(result.signals) && ['High', 'Medium', 'Low'].includes(result.confidence) && Array.isArray(result.limitations)
+  },
+  PRODUCT_DISCOVERY: {
+    shape: '{"products":[{"product_name":"string","category":"string","reason":"string"}],"limitations":["string"]}',
+    validate: (result) => Array.isArray(result.products) && Array.isArray(result.limitations)
+  },
+  MARKET_DEMAND_ANALYSIS: {
+    shape: '{"demand_assessment":"Promising|Unclear|Weak","signals":["string"],"confidence":"High|Medium|Low","limitations":["string"]}',
+    validate: (result) => ['Promising', 'Unclear', 'Weak'].includes(result.demand_assessment) && Array.isArray(result.signals) && ['High', 'Medium', 'Low'].includes(result.confidence) && Array.isArray(result.limitations)
+  },
+  SUPPLIER_ANALYSIS: {
+    shape: '{"supplier_comparison":[{"supplier_name":"string","price_inr":null,"moq":null,"verification_status":"unverified|manually_verified"}],"summary":"string","limitations":["string"]}',
+    validate: (result) => Array.isArray(result.supplier_comparison) && typeof result.summary === 'string' && Array.isArray(result.limitations)
+  },
+  PRODUCT_OPPORTUNITY_SCORING: {
+    shape: '{"market_opportunity_score":0,"profitability_score":0,"confidence":"High|Medium|Low","positive_factors":["string"],"risks":["string"],"missing_information":["string"]}',
+    validate: (result) => Number.isInteger(result.market_opportunity_score) && result.market_opportunity_score >= 0 && result.market_opportunity_score <= 100 && Number.isInteger(result.profitability_score) && result.profitability_score >= 0 && result.profitability_score <= 100 && ['High', 'Medium', 'Low'].includes(result.confidence) && Array.isArray(result.positive_factors) && Array.isArray(result.risks) && Array.isArray(result.missing_information)
+  },
+  PRODUCT_DEDUPLICATION: {
+    shape: '{"groups":[{"canonical_name":"string","product_indexes":[0],"merge_decision":"merge|keep_separate","reason":"string"}],"limitations":["string"]}',
+    validate: (result) => Array.isArray(result.groups) && Array.isArray(result.limitations)
   }
 };
 

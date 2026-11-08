@@ -12,6 +12,12 @@ import { ResearchObservation } from './models/ResearchObservation.js';
 import { ResearchRun } from './models/ResearchRun.js';
 import { WorkerHeartbeat } from './models/WorkerHeartbeat.js';
 import { parseObservations, providers, runSchema } from './research.js';
+import { ResearchProduct } from './models/ResearchProduct.js';
+import { ProductObservation } from './models/ProductObservation.js';
+import { ProductOpportunity } from './models/ProductOpportunity.js';
+import { ProductFeedback } from './models/ProductFeedback.js';
+import { SupplierObservation } from './models/SupplierObservation.js';
+import { importSchema, normalizeProduct, productKey, scoreProduct } from './productResearch.js';
 
 const app = express();
 
@@ -24,9 +30,83 @@ app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'crafttr
 
 app.get('/api/research/providers', requireAuth, (_req, res) => res.json({ providers }));
 
+app.post('/api/product-research/import', requireAuth, async (req, res, next) => {
+  try {
+    const { products } = importSchema.parse(req.body);
+    const saved = [];
+    for (const input of products) {
+      const normalized = normalizeProduct(input);
+      const key = productKey(input.productName, input.category);
+      const addToSet = { dataFieldsVerified: { $each: input.dataFieldsVerified }, dataFieldsEstimated: { $each: input.dataFieldsEstimated } };
+      if (input.sourceUrl) addToSet.sourceUrls = input.sourceUrl;
+      if (['meesho', 'amazon_india', 'flipkart'].includes(input.source)) addToSet.sourceMarketplaces = input.source;
+      const product = await ResearchProduct.findOneAndUpdate(
+        { productKey: key },
+        { $set: { productName: input.productName, category: input.category, description: input.description, confidence: input.confidence }, $addToSet: addToSet },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      const observation = await ProductObservation.create({ ...normalized, productId: product.id });
+      const score = scoreProduct({ observations: [input] });
+      await ProductOpportunity.create({ productId: product.id, researchDate: input.observedAt, marketOpportunityScore: score.marketOpportunityScore, profitabilityScore: score.profitabilityScore, confidence: score.confidence, dataCompleteness: score.dataCompleteness, missingInformation: score.missingInformation, scoreInputs: { source: input.source } });
+      saved.push({ product, observation });
+    }
+    return res.status(201).json({ count: saved.length, products: saved });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get('/api/product-research/dashboard', requireAuth, async (req, res, next) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
+    const products = await ResearchProduct.find().sort({ updatedAt: -1 }).limit(limit).lean();
+    const productIds = products.map((item) => item._id);
+    const [opportunities, observations] = await Promise.all([
+      ProductOpportunity.find({ productId: { $in: productIds } }).sort({ researchDate: -1, marketOpportunityScore: -1 }).lean(),
+      ProductObservation.find({ productId: { $in: productIds } }).sort({ observedAt: -1 }).lean()
+    ]);
+    const latestOpportunity = new Map();
+    for (const opportunity of opportunities) if (!latestOpportunity.has(String(opportunity.productId))) latestOpportunity.set(String(opportunity.productId), opportunity);
+    const observationMap = new Map();
+    for (const observation of observations) { const key = String(observation.productId); if (!observationMap.has(key)) observationMap.set(key, []); observationMap.get(key).push(observation); }
+    const results = products.map((product) => ({ ...product, opportunity: latestOpportunity.get(String(product._id)) || null, observations: observationMap.get(String(product._id)) || [] })).sort((a, b) => (b.opportunity?.marketOpportunityScore || 0) - (a.opportunity?.marketOpportunityScore || 0));
+    return res.json({ researchDate: new Date().toISOString().slice(0, 10), totalProducts: results.length, sufficientEvidence: results.filter((item) => item.confidence !== 'low').length, needsVerification: results.filter((item) => item.confidence === 'low').length, products: results });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post('/api/product-research/:id/feedback', requireAuth, async (req, res, next) => {
+  try {
+    const feedback = await ProductFeedback.create({ productId: req.params.id, action: req.body?.action, note: req.body?.note });
+    await ResearchProduct.findByIdAndUpdate(req.params.id, { $set: { status: req.body?.action === 'interested' ? 'interested' : req.body?.action === 'rejected' ? 'rejected' : 'new', notes: req.body?.note } });
+    return res.status(201).json({ feedback });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post('/api/product-research/jobs', requireAuth, async (req, res, next) => {
+  try {
+    const job = await ResearchJob.create({ type: 'PRODUCT_DISCOVERY', payload: { categories: req.body?.categories || [], sources: req.body?.sources || [], requestedAt: new Date() } });
+    return res.status(201).json({ job, status: 'queued', note: 'Automatic collection remains disabled until each source adapter is approved and tested.' });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post('/api/suppliers/import', requireAuth, async (req, res, next) => {
+  try {
+    const supplier = await SupplierObservation.create({ supplierName: req.body?.supplierName, productName: req.body?.productName, sourceUrl: req.body?.sourceUrl, contactReference: req.body?.contactReference, quotedPrice: req.body?.quotedPrice, minimumOrderQuantity: req.body?.minimumOrderQuantity, packSize: req.body?.packSize, shippingInformation: req.body?.shippingInformation, verificationStatus: req.body?.verificationStatus || 'unverified' });
+    return res.status(201).json({ supplier });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.post('/api/ai/jobs', requireAuth, async (req, res, next) => {
   try {
-    const supportedTypes = ['PRODUCT_ANALYSIS', 'COMPETITOR_ANALYSIS', 'PROFITABILITY_ANALYSIS', 'PRODUCT_DESCRIPTION', 'PRODUCT_CLASSIFICATION', 'TREND_ANALYSIS'];
+    const supportedTypes = ['PRODUCT_ANALYSIS', 'COMPETITOR_ANALYSIS', 'PROFITABILITY_ANALYSIS', 'PRODUCT_DESCRIPTION', 'PRODUCT_CLASSIFICATION', 'TREND_ANALYSIS', 'PRODUCT_DISCOVERY', 'MARKET_DEMAND_ANALYSIS', 'SUPPLIER_ANALYSIS', 'PRODUCT_OPPORTUNITY_SCORING', 'PRODUCT_DEDUPLICATION'];
     const type = String(req.body?.type || '');
     if (!supportedTypes.includes(type)) return res.status(400).json({ error: 'Unsupported AI job type', supportedTypes });
     if (!req.body?.payload || typeof req.body.payload !== 'object') return res.status(400).json({ error: 'Job payload must be an object' });

@@ -88,3 +88,11 @@ The benchmark reports availability, response time, Ollama token timings, and a b
 ## Phase 3 research boundary
 
 Research history stores normalized observations with provider, source URL, timestamp, evidence, and data-status fields. Amazon observations also support Best Sellers Rank, rank category, units sold, revenue, and the reporting period. Public BSR is a demand signal; exact period sales must be tagged with their authorized source, such as Seller Central reports or Product Opportunity Explorer. Amazon documents that BSR is relative and sales-weighted, not a direct unit-sales counter. The initial Phase 3 path is manual import because marketplace access rules and API availability vary by account and provider. The API intentionally does not scrape, bypass CAPTCHAs, or invent sales/search data.
+
+## Phase 3 product research
+
+Product Research supports normalized manual/import observations for Meesho, Amazon India, Flipkart, Google Trends, Google Search, Pinterest, IndiaMART, online wholesalers, and local supplier data. The source adapter interface is in `apps/api/src/sources/index.js`; each source is currently marked `manual_import` because no live source authorization or permitted automated feed has been configured.
+
+Import product observations through the authenticated `POST /api/product-research/import` endpoint. Use `GET /api/product-research/dashboard` for the research dashboard and `POST /api/product-research/jobs` to queue a future discovery job. The frontend includes Product Research, Import Research, Daily Top 20, evidence history, and CSV export.
+
+Scores are evidence-based estimates. Missing prices, supplier quotes, costs, trends, ratings, or reviews reduce completeness and confidence. Marketplace prices are never treated as purchase costs. Supplier quotes remain unverified until manually confirmed. Automatic daily scheduling is intentionally not enabled until the manual flow is tested.
